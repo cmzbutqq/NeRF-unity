@@ -1,4 +1,4 @@
-Shader "Custom/DepthCapture"
+Shader "Hidden/DepthVisualization"
 {
     Properties
     {
@@ -7,12 +7,8 @@ Shader "Custom/DepthCapture"
     SubShader
     {
         Tags { "RenderType"="Opaque" }
-        LOD 100
-
         Pass
         {
-            Name "DepthCapture"
-
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -28,36 +24,31 @@ Shader "Custom/DepthCapture"
             {
                 float2 uv : TEXCOORD0;
                 float4 vertex : SV_POSITION;
-                float depth : TEXCOORD1;
             };
 
             sampler2D _MainTex;
-            float4 _MainTex_ST;
+            sampler2D _CameraDepthTexture;
 
             v2f vert (appdata v)
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-
-                // 计算线性深度
-                float4 worldPos = mul(unity_ObjectToWorld, v.vertex);
-                float4 viewPos = mul(UNITY_MATRIX_V, worldPos);
-                o.depth = -viewPos.z;
-
+                o.uv = v.uv;
                 return o;
             }
 
             fixed4 frag (v2f i) : SV_Target
             {
-                // 将深度值归一化到0-1范围
-                float normalizedDepth = (i.depth - _ProjectionParams.y) / (_ProjectionParams.z - _ProjectionParams.y);
-                normalizedDepth = saturate(normalizedDepth);
-
+                // 读取深度值
+                float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+                // 转换为线性深度
+                depth = Linear01Depth(depth);
                 // 增强对比度
-                normalizedDepth = pow(normalizedDepth, 0.5);
+                depth = pow(depth, 0.5);
+                // 反转深度（近处亮，远处暗）
+                depth = 1.0 - depth;
 
-                return fixed4(normalizedDepth, normalizedDepth, normalizedDepth, 1.0);
+                return fixed4(depth, depth, depth, 1.0);
             }
             ENDCG
         }

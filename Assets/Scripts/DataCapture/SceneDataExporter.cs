@@ -209,62 +209,229 @@ namespace DataCapture
         {
             string depthPath = Path.Combine(basePath, "depth", $"{imageName}_depth.png");
 
-            // 使用Unity内置的深度渲染
+            // 保存原始设置
             RenderTexture previousRT = renderCamera.targetTexture;
-            RenderTexture depthBuffer = new RenderTexture(imageWidth, imageHeight, 24, RenderTextureFormat.Depth);
-            depthBuffer.Create();
+            DepthTextureMode previousDepthMode = renderCamera.depthTextureMode;
 
-            // 创建临时摄像机用于深度渲染
-            GameObject tempCamObj = new GameObject("TempDepthCamera");
-            Camera depthCam = tempCamObj.AddComponent<Camera>();
+            // 创建深度渲染纹理
+            RenderTexture colorRT = new RenderTexture(imageWidth, imageHeight, 24, RenderTextureFormat.ARGB32);
+            colorRT.Create();
 
-            // 复制主摄像机设置
-            depthCam.CopyFrom(renderCamera);
-            depthCam.backgroundColor = Color.white;
-            depthCam.clearFlags = CameraClearFlags.SolidColor;
-            depthCam.targetTexture = depthBuffer;
+            // 启用深度纹理模式
+            renderCamera.depthTextureMode = DepthTextureMode.Depth;
+            renderCamera.targetTexture = colorRT;
 
-            // 设置深度渲染模式
-            depthCam.SetReplacementShader(Shader.Find("Hidden/Internal-DepthNormalsTexture"), "");
+            // 创建深度可视化材质
+            Material depthMaterial = CreateDepthVisualizationMaterial();
 
-            // 渲染深度
-            depthCam.Render();
-
-            // 读取深度数据
-            RenderTexture.active = depthBuffer;
-
-            // 创建用于读取深度的纹理
-            Texture2D depthTex = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false);
-            depthTex.ReadPixels(new Rect(0, 0, imageWidth, imageHeight), 0, 0);
-            depthTex.Apply();
-
-            // 处理深度数据 - 转换为更可视化的格式
-            Color[] pixels = depthTex.GetPixels();
-            for (int i = 0; i < pixels.Length; i++)
+            if (depthMaterial != null)
             {
-                // 从深度法线纹理中提取深度信息
-                float depth = pixels[i].r;
-                // 增强对比度使深度更明显
-                depth = Mathf.Pow(depth, 0.5f);
-                pixels[i] = new Color(depth, depth, depth, 1.0f);
+                // 渲染场景到颜色纹理
+                renderCamera.Render();
+
+                // 使用深度材质将深度缓冲转换为可视化图像
+                RenderTexture depthVisualization = new RenderTexture(imageWidth, imageHeight, 0, RenderTextureFormat.ARGB32);
+                depthVisualization.Create();
+
+                Graphics.Blit(colorRT, depthVisualization, depthMaterial);
+
+                // 读取深度可视化结果
+                RenderTexture.active = depthVisualization;
+                Texture2D depthTex = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false);
+                depthTex.ReadPixels(new Rect(0, 0, imageWidth, imageHeight), 0, 0);
+                depthTex.Apply();
+
+                // 后处理深度数据以增强可视化效果
+                ProcessDepthTexture(depthTex);
+
+                // 保存深度图
+                byte[] depthData = depthTex.EncodeToPNG();
+                File.WriteAllBytes(depthPath, depthData);
+
+                // 清理资源
+                RenderTexture.active = null;
+                depthVisualization.Release();
+                DestroyImmediate(depthTex);
+                DestroyImmediate(depthMaterial);
             }
-            depthTex.SetPixels(pixels);
-            depthTex.Apply();
+            else
+            {
+                // 备用方案：使用简单的距离计算
+                yield return StartCoroutine(CaptureDepthMapFallback(basePath, imageName));
+            }
 
-            // 保存深度图
-            byte[] depthData = depthTex.EncodeToPNG();
-            File.WriteAllBytes(depthPath, depthData);
-
-            // 清理资源
-            RenderTexture.active = null;
+            // 恢复原始设置
             renderCamera.targetTexture = previousRT;
-            depthBuffer.Release();
-            DestroyImmediate(depthTex);
-            DestroyImmediate(tempCamObj);
+            renderCamera.depthTextureMode = previousDepthMode;
+            colorRT.Release();
 
             yield return null;
         }
         
+        /// <summary>
+        /// 创建深度可视化材质
+        /// </summary>
+        Material CreateDepthVisualizationMaterial()
+        {
+            // 创建深度可视化shader代码
+            string shaderCode = @"
+            Shader ""Hidden/DepthVisualization""
+            {
+                Properties
+                {
+                    _MainTex (""Texture"", 2D) = ""white"" {}
+                }
+                SubShader
+                {
+                    Tags { ""RenderType""=""Opaque"" }
+                    Pass
+                    {
+                        CGPROGRAM
+                        #pragma vertex vert
+                        #pragma fragment frag
+                        #include ""UnityCG.cginc""
+
+                        struct appdata
+                        {
+                            float4 vertex : POSITION;
+                            float2 uv : TEXCOORD0;
+                        };
+
+                        struct v2f
+                        {
+                            float2 uv : TEXCOORD0;
+                            float4 vertex : SV_POSITION;
+                        };
+
+                        sampler2D _MainTex;
+                        sampler2D _CameraDepthTexture;
+
+                        v2f vert (appdata v)
+                        {
+                            v2f o;
+                            o.vertex = UnityObjectToClipPos(v.vertex);
+                            o.uv = v.uv;
+                            return o;
+                        }
+
+                        fixed4 frag (v2f i) : SV_Target
+                        {
+                            // 读取深度值
+                            float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+                            // 转换为线性深度
+                            depth = Linear01Depth(depth);
+                            // 增强对比度
+                            depth = pow(depth, 0.5);
+                            // 反转深度（近处亮，远处暗）
+                            depth = 1.0 - depth;
+
+                            return fixed4(depth, depth, depth, 1.0);
+                        }
+                        ENDCG
+                    }
+                }
+            }";
+
+            Shader depthShader = Shader.Find("Hidden/DepthVisualization");
+            if (depthShader == null)
+            {
+                // 如果shader不存在，尝试创建临时shader
+                Debug.LogWarning("深度可视化Shader未找到，使用备用方案");
+                return null;
+            }
+
+            return new Material(depthShader);
+        }
+
+        /// <summary>
+        /// 处理深度纹理以增强可视化效果
+        /// </summary>
+        void ProcessDepthTexture(Texture2D depthTex)
+        {
+            Color[] pixels = depthTex.GetPixels();
+            float minDepth = 1.0f;
+            float maxDepth = 0.0f;
+
+            // 找到深度范围
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                float depth = pixels[i].r;
+                minDepth = Mathf.Min(minDepth, depth);
+                maxDepth = Mathf.Max(maxDepth, depth);
+            }
+
+            Debug.Log($"深度范围: {minDepth:F3} - {maxDepth:F3}");
+
+            // 重新映射深度值以增强对比度
+            float depthRange = maxDepth - minDepth;
+            if (depthRange > 0.001f) // 避免除零
+            {
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    float depth = pixels[i].r;
+                    // 归一化到0-1范围
+                    depth = (depth - minDepth) / depthRange;
+                    // 应用伽马校正增强对比度
+                    depth = Mathf.Pow(depth, 0.7f);
+                    pixels[i] = new Color(depth, depth, depth, 1.0f);
+                }
+
+                depthTex.SetPixels(pixels);
+                depthTex.Apply();
+            }
+        }
+
+        /// <summary>
+        /// 备用深度捕获方案
+        /// </summary>
+        IEnumerator CaptureDepthMapFallback(string basePath, string imageName)
+        {
+            string depthPath = Path.Combine(basePath, "depth", $"{imageName}_depth.png");
+
+            // 使用简单的距离计算方案
+            Texture2D depthTex = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false);
+            Color[] pixels = new Color[imageWidth * imageHeight];
+
+            // 获取摄像机参数
+            Vector3 camPos = renderCamera.transform.position;
+            float nearPlane = renderCamera.nearClipPlane;
+            float farPlane = renderCamera.farClipPlane;
+
+            // 简单的深度模拟（基于距离到摄像机的距离）
+            for (int y = 0; y < imageHeight; y++)
+            {
+                for (int x = 0; x < imageWidth; x++)
+                {
+                    // 将屏幕坐标转换为世界射线
+                    Vector3 screenPoint = new Vector3(
+                        (float)x / imageWidth,
+                        (float)y / imageHeight,
+                        (nearPlane + farPlane) * 0.5f
+                    );
+
+                    Ray ray = renderCamera.ScreenPointToRay(screenPoint);
+
+                    // 简单的深度估算
+                    float depth = Vector3.Distance(camPos, ray.origin + ray.direction * 5f);
+                    depth = Mathf.Clamp01((depth - nearPlane) / (farPlane - nearPlane));
+                    depth = 1.0f - depth; // 反转
+
+                    int index = y * imageWidth + x;
+                    pixels[index] = new Color(depth, depth, depth, 1.0f);
+                }
+            }
+
+            depthTex.SetPixels(pixels);
+            depthTex.Apply();
+
+            byte[] depthData = depthTex.EncodeToPNG();
+            File.WriteAllBytes(depthPath, depthData);
+
+            DestroyImmediate(depthTex);
+
+            yield return null;
+        }
+
         /// <summary>
         /// 捕获摄像机参数
         /// </summary>

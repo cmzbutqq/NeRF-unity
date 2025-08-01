@@ -157,8 +157,18 @@ namespace DataCapture
             if (exportCameraParams)
             {
                 ExportCameraParameters(fullExportPath);
+
+                // 导出COLMAP格式文件
+                COLMAPExporter.ExportCOLMAPFormat(fullExportPath, cameraDataList);
+
+                // 验证COLMAP文件
+                string sparsePath = Path.Combine(fullExportPath, "sparse", "0");
+                COLMAPExporter.ValidateCOLMAPFiles(sparsePath);
+
+                // 生成数据集摘要
+                COLMAPExporter.GenerateDatasetSummary(fullExportPath, cameraDataList);
             }
-            
+
             Debug.Log($"数据导出完成！导出路径: {fullExportPath}");
         }
         
@@ -256,8 +266,7 @@ namespace DataCapture
             }
             else
             {
-                // 备用方案：使用简单的距离计算
-                yield return StartCoroutine(CaptureDepthMapFallback(basePath, imageName));
+                Debug.LogError("无法创建深度可视化材质，跳过深度图捕获");
             }
 
             // 恢复原始设置
@@ -273,70 +282,10 @@ namespace DataCapture
         /// </summary>
         Material CreateDepthVisualizationMaterial()
         {
-            // 创建深度可视化shader代码
-            string shaderCode = @"
-            Shader ""Hidden/DepthVisualization""
-            {
-                Properties
-                {
-                    _MainTex (""Texture"", 2D) = ""white"" {}
-                }
-                SubShader
-                {
-                    Tags { ""RenderType""=""Opaque"" }
-                    Pass
-                    {
-                        CGPROGRAM
-                        #pragma vertex vert
-                        #pragma fragment frag
-                        #include ""UnityCG.cginc""
-
-                        struct appdata
-                        {
-                            float4 vertex : POSITION;
-                            float2 uv : TEXCOORD0;
-                        };
-
-                        struct v2f
-                        {
-                            float2 uv : TEXCOORD0;
-                            float4 vertex : SV_POSITION;
-                        };
-
-                        sampler2D _MainTex;
-                        sampler2D _CameraDepthTexture;
-
-                        v2f vert (appdata v)
-                        {
-                            v2f o;
-                            o.vertex = UnityObjectToClipPos(v.vertex);
-                            o.uv = v.uv;
-                            return o;
-                        }
-
-                        fixed4 frag (v2f i) : SV_Target
-                        {
-                            // 读取深度值
-                            float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
-                            // 转换为线性深度
-                            depth = Linear01Depth(depth);
-                            // 增强对比度
-                            depth = pow(depth, 0.5);
-                            // 反转深度（近处亮，远处暗）
-                            depth = 1.0 - depth;
-
-                            return fixed4(depth, depth, depth, 1.0);
-                        }
-                        ENDCG
-                    }
-                }
-            }";
-
             Shader depthShader = Shader.Find("Hidden/DepthVisualization");
             if (depthShader == null)
             {
-                // 如果shader不存在，尝试创建临时shader
-                Debug.LogWarning("深度可视化Shader未找到，使用备用方案");
+                Debug.LogWarning("深度可视化Shader未找到");
                 return null;
             }
 
@@ -381,56 +330,7 @@ namespace DataCapture
             }
         }
 
-        /// <summary>
-        /// 备用深度捕获方案
-        /// </summary>
-        IEnumerator CaptureDepthMapFallback(string basePath, string imageName)
-        {
-            string depthPath = Path.Combine(basePath, "depth", $"{imageName}_depth.png");
 
-            // 使用简单的距离计算方案
-            Texture2D depthTex = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false);
-            Color[] pixels = new Color[imageWidth * imageHeight];
-
-            // 获取摄像机参数
-            Vector3 camPos = renderCamera.transform.position;
-            float nearPlane = renderCamera.nearClipPlane;
-            float farPlane = renderCamera.farClipPlane;
-
-            // 简单的深度模拟（基于距离到摄像机的距离）
-            for (int y = 0; y < imageHeight; y++)
-            {
-                for (int x = 0; x < imageWidth; x++)
-                {
-                    // 将屏幕坐标转换为世界射线
-                    Vector3 screenPoint = new Vector3(
-                        (float)x / imageWidth,
-                        (float)y / imageHeight,
-                        (nearPlane + farPlane) * 0.5f
-                    );
-
-                    Ray ray = renderCamera.ScreenPointToRay(screenPoint);
-
-                    // 简单的深度估算
-                    float depth = Vector3.Distance(camPos, ray.origin + ray.direction * 5f);
-                    depth = Mathf.Clamp01((depth - nearPlane) / (farPlane - nearPlane));
-                    depth = 1.0f - depth; // 反转
-
-                    int index = y * imageWidth + x;
-                    pixels[index] = new Color(depth, depth, depth, 1.0f);
-                }
-            }
-
-            depthTex.SetPixels(pixels);
-            depthTex.Apply();
-
-            byte[] depthData = depthTex.EncodeToPNG();
-            File.WriteAllBytes(depthPath, depthData);
-
-            DestroyImmediate(depthTex);
-
-            yield return null;
-        }
 
         /// <summary>
         /// 捕获摄像机参数

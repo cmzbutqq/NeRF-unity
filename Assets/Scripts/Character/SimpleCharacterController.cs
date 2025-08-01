@@ -17,9 +17,13 @@ namespace DataCapture
         [SerializeField] private float mouseSensitivity = 2f;
         [SerializeField] private float maxLookAngle = 80f;
         
+        [Header("地面检测")]
+        [SerializeField] private float groundCheckOffset = 0.1f; // 额外的检测偏移
+        [SerializeField] private LayerMask groundLayerMask = -1;
+
         [Header("调试")]
         [SerializeField] private bool showDebugInfo = false;
-        
+
         private CharacterController characterController;
         private float verticalRotation = 0f;
         private Vector3 velocity;
@@ -86,23 +90,50 @@ namespace DataCapture
         
         void HandleJump()
         {
-            // 检查是否在地面
-            isGrounded = characterController.isGrounded;
-            
+            // 改进的地面检测
+            isGrounded = CheckGrounded();
+
             if (isGrounded && velocity.y < 0)
             {
                 velocity.y = -2f; // 小的负值确保贴地
             }
-            
-            // 空格键跳跃
-            if (Input.GetButtonDown("Jump") && isGrounded)
+
+            // 空格键跳跃 - 使用KeyCode.Space确保兼容性
+            if ((Input.GetKeyDown(KeyCode.Space) || Input.GetButtonDown("Jump")) && isGrounded)
             {
                 velocity.y = Mathf.Sqrt(jumpForce * -2f * Physics.gravity.y);
+                Debug.Log("跳跃！");
             }
-            
+
             // 应用重力
             velocity.y += Physics.gravity.y * Time.deltaTime;
             characterController.Move(velocity * Time.deltaTime);
+        }
+
+        /// <summary>
+        /// 改进的地面检测 - 自动适应角色高度
+        /// </summary>
+        bool CheckGrounded()
+        {
+            // 使用CharacterController的内置检测
+            bool controllerGrounded = characterController.isGrounded;
+
+            // 使用射线检测作为备用，自动计算检测距离
+            float characterHeight = characterController.height;
+
+            // 从角色中心向下检测到脚底 + 额外偏移
+            Vector3 rayStart = transform.position;
+            float rayDistance = (characterHeight * 0.5f) + groundCheckOffset;
+
+            bool raycastGrounded = Physics.Raycast(rayStart, Vector3.down, rayDistance, groundLayerMask);
+
+            // 调试信息
+            if (showDebugInfo)
+            {
+                Debug.DrawRay(rayStart, Vector3.down * rayDistance, raycastGrounded ? Color.green : Color.red);
+            }
+
+            return controllerGrounded || raycastGrounded;
         }
         
         void HandleInput()

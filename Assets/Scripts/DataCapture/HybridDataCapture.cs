@@ -312,17 +312,139 @@ namespace DataCapture
                 Debug.LogWarning("没有采集数据可导出");
                 return;
             }
-            
+
             string fullExportPath = Path.Combine(Application.dataPath, "..", exportPath);
-            
+
             // 导出JSON格式的摄像机数据
             string jsonPath = Path.Combine(fullExportPath, "hybrid_cameras.json");
             string jsonData = JsonUtility.ToJson(new HybridCameraDataWrapper { cameras = captureDataList }, true);
             File.WriteAllText(jsonPath, jsonData);
-            
+
+            // 导出COLMAP格式数据
+            ExportHybridCOLMAPFormat(fullExportPath);
+
+            // 生成数据集摘要
+            GenerateHybridDatasetSummary(fullExportPath);
+
             Debug.Log($"混合采集数据已导出: {fullExportPath} (共{captureDataList.Count}帧)");
         }
         
+        /// <summary>
+        /// 导出COLMAP格式数据
+        /// </summary>
+        void ExportHybridCOLMAPFormat(string basePath)
+        {
+            string sparsePath = Path.Combine(basePath, "sparse", "0");
+            Directory.CreateDirectory(sparsePath);
+
+            // 转换为COLMAP兼容的数据格式
+            List<SceneDataExporter.CameraData> colmapData = ConvertToColmapFormat();
+
+            // 使用现有的COLMAP导出器
+            COLMAPExporter.ExportCOLMAPFormat(basePath, colmapData);
+
+            Debug.Log($"混合采集COLMAP格式已导出到: {sparsePath}");
+        }
+
+        /// <summary>
+        /// 转换混合采集数据为COLMAP格式
+        /// </summary>
+        List<SceneDataExporter.CameraData> ConvertToColmapFormat()
+        {
+            List<SceneDataExporter.CameraData> colmapData = new List<SceneDataExporter.CameraData>();
+
+            for (int i = 0; i < captureDataList.Count; i++)
+            {
+                var hybridData = captureDataList[i];
+
+                SceneDataExporter.CameraData colmapCam = new SceneDataExporter.CameraData
+                {
+                    imageId = hybridData.captureId,
+                    imageName = hybridData.imageName,
+                    position = hybridData.position,
+                    rotation = hybridData.rotation,
+                    projectionMatrix = hybridData.projectionMatrix,
+                    worldToCameraMatrix = hybridData.worldToCameraMatrix,
+                    fieldOfView = hybridData.fieldOfView,
+                    nearClipPlane = captureCamera.nearClipPlane,
+                    farClipPlane = captureCamera.farClipPlane,
+                    aspect = (float)imageWidth / imageHeight
+                };
+
+                colmapData.Add(colmapCam);
+            }
+
+            return colmapData;
+        }
+
+        /// <summary>
+        /// 生成混合采集数据集摘要
+        /// </summary>
+        void GenerateHybridDatasetSummary(string basePath)
+        {
+            string summaryPath = Path.Combine(basePath, "hybrid_dataset_summary.txt");
+
+            // 统计采集来源
+            int manualCount = 0;
+            int autoCount = 0;
+
+            foreach (var data in captureDataList)
+            {
+                if (data.source == CaptureSource.Manual)
+                    manualCount++;
+                else
+                    autoCount++;
+            }
+
+            using (StreamWriter writer = new StreamWriter(summaryPath))
+            {
+                writer.WriteLine("=== 混合3DGS训练数据集摘要 ===");
+                writer.WriteLine($"生成时间: {System.DateTime.Now}");
+                writer.WriteLine($"总图像数量: {captureDataList.Count}");
+                writer.WriteLine($"  手动采集: {manualCount}");
+                writer.WriteLine($"  自动采集: {autoCount}");
+                writer.WriteLine($"图像分辨率: {imageWidth}x{imageHeight}");
+                writer.WriteLine($"摄像机模型: PINHOLE");
+                writer.WriteLine();
+
+                if (captureDataList.Count > 0)
+                {
+                    var firstCam = captureDataList[0];
+                    writer.WriteLine("摄像机参数:");
+                    writer.WriteLine($"  视场角: {firstCam.fieldOfView:F2}°");
+                    writer.WriteLine($"  近裁剪面: {captureCamera.nearClipPlane:F3}");
+                    writer.WriteLine($"  远裁剪面: {captureCamera.farClipPlane:F3}");
+                    writer.WriteLine($"  宽高比: {(float)imageWidth / imageHeight:F3}");
+                }
+
+                writer.WriteLine();
+                writer.WriteLine("采集设置:");
+                writer.WriteLine($"  自动采集间隔: {autoInterval}秒");
+                writer.WriteLine($"  最小移动距离: {minMoveDistance}米");
+                writer.WriteLine($"  手动采集按键: {manualCaptureKey}");
+
+                writer.WriteLine();
+                writer.WriteLine("文件结构:");
+                writer.WriteLine("  images/              - RGB图像");
+                writer.WriteLine("  depth/               - 深度图");
+                writer.WriteLine("  sparse/0/            - COLMAP格式数据");
+                writer.WriteLine("    cameras.txt        - 摄像机内参");
+                writer.WriteLine("    images.txt         - 图像外参");
+                writer.WriteLine("    points3D.txt       - 3D点云（空）");
+                writer.WriteLine("  hybrid_cameras.json  - Unity摄像机数据");
+
+                writer.WriteLine();
+                writer.WriteLine("采集时间线:");
+                foreach (var data in captureDataList)
+                {
+                    string sourceStr = data.source == CaptureSource.Manual ? "手动" : "自动";
+                    writer.WriteLine($"  {data.timestamp:F2}s - {data.imageName} ({sourceStr})");
+                }
+            }
+
+            Debug.Log($"混合采集数据集摘要已生成: {summaryPath}");
+        }
+
         [System.Serializable]
         public class HybridCameraDataWrapper
         {

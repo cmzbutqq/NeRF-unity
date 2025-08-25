@@ -402,6 +402,74 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &901262310
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 901262313}
+  - component: {fileID: 901262312}
+  - component: {fileID: 901262311}
+  m_Layer: 0
+  m_Name: EventSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &901262311
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 901262310}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f231c4fb786f3946a6b90b886c48677, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_SendPointerHoverToParent: 1
+  m_HorizontalAxis: Horizontal
+  m_VerticalAxis: Vertical
+  m_SubmitButton: Submit
+  m_CancelButton: Cancel
+  m_InputActionsPerSecond: 10
+  m_RepeatDelay: 0.5
+  m_ForceModuleActive: 0
+--- !u!114 &901262312
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 901262310}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_FirstSelected: {fileID: 0}
+  m_sendNavigationEvents: 1
+  m_DragThreshold: 10
+--- !u!4 &901262313
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 901262310}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1201850771
 GameObject:
   m_ObjectHideFlags: 0
@@ -1111,6 +1179,131 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1956058361
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1956058366}
+  - component: {fileID: 1956058365}
+  - component: {fileID: 1956058364}
+  - component: {fileID: 1956058363}
+  - component: {fileID: 1956058362}
+  m_Layer: 0
+  m_Name: TrainingManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1956058362
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956058361}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6466c3c4d81dc99418c42dd344e9ace0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  trainingManager: {fileID: 0}
+  environmentSetup: {fileID: 0}
+  progressMonitor: {fileID: 0}
+  startTrainingButton: {fileID: 0}
+  stopTrainingButton: {fileID: 0}
+  checkEnvironmentButton: {fileID: 0}
+  installDependenciesButton: {fileID: 0}
+  environmentStatusText: {fileID: 0}
+  trainingStatusText: {fileID: 0}
+  environmentPanel: {fileID: 0}
+  trainingPanel: {fileID: 0}
+  defaultColmapDataPath: captured_data
+  autoStartAfterEnvironmentReady: 0
+  enableLogging: 1
+--- !u!114 &1956058363
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956058361}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd31c9d2f367c4a46afd5e2b0ae5d200, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  statusText: {fileID: 0}
+  progressText: {fileID: 0}
+  timeText: {fileID: 0}
+  progressSlider: {fileID: 0}
+  progressFillImage: {fileID: 0}
+  startButton: {fileID: 0}
+  stopButton: {fileID: 0}
+  resetButton: {fileID: 0}
+  preparingColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  trainingColor: {r: 0, g: 0, b: 1, a: 1}
+  completedColor: {r: 0, g: 1, b: 0, a: 1}
+  failedColor: {r: 1, g: 0, b: 0, a: 1}
+  trainingManager: {fileID: 0}
+--- !u!114 &1956058364
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956058361}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f34cdfdb5d93144ca47eb51695a2d93, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  instantNGPPath: ./instant-ngp
+  pythonPath: ./instant-ngp-env/Scripts/python.exe
+  maxTrainingSteps: 1000
+  targetTrainingTime: 3
+  outputPath: trained_models/instant-ngp
+  snapshotName: scene_snapshot.ingp
+  showDebugInfo: 1
+  enableLogging: 1
+--- !u!114 &1956058365
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956058361}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab7e3884edad2ba449d697599cd05fa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  instantNGPPath: ./instant-ngp
+  pythonPath: ./instant-ngp-env/Scripts/python.exe
+  virtualEnvPath: ./instant-ngp-env
+  requirementsPath: ./instant-ngp/requirements.txt
+  autoDetectEnvironment: 1
+  showEnvironmentInfo: 1
+  enableLogging: 1
+--- !u!4 &1956058366
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956058361}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1.9863563, y: 1.4842362, z: 5.90069}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1996675131
 GameObject:
   m_ObjectHideFlags: 0
@@ -1286,3 +1479,5 @@ SceneRoots:
   - {fileID: 1465962235}
   - {fileID: 1278369766}
   - {fileID: 588225590}
+  - {fileID: 1956058366}
+  - {fileID: 901262313}

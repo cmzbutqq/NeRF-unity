@@ -1,497 +1,404 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace Training
 {
     /// <summary>
-    /// Instant-NGP 快速训练启动器 - 提供一键启动训练功能
+    /// Instant-NGP 快速训练启动器 - 一键启动秒级训练
     /// </summary>
     public class InstantNGPQuickTrainer : MonoBehaviour
     {
-        [Header("组件引用")]
-        [SerializeField] private InstantNGPTrainingManager trainingManager;
-        [SerializeField] private InstantNGPEnvironmentSetup environmentSetup;
-        [SerializeField] private TrainingProgressMonitor progressMonitor;
+        [Header("Instant-NGP 路径配置")]
+        [SerializeField] private string instantNGPPath = "./Instant-NGP-for-RTX-3000-and-4000";
+        [SerializeField] private string instantNGPExe = "instant-ngp.exe";
         
-        [Header("UI组件")]
-        [SerializeField] private Button startTrainingButton;
-        [SerializeField] private Button stopTrainingButton;
-        [SerializeField] private Button checkEnvironmentButton;
-        [SerializeField] private Button installDependenciesButton;
-        [SerializeField] private Text environmentStatusText;
-        [SerializeField] private Text trainingStatusText;
-        [SerializeField] private GameObject environmentPanel;
-        [SerializeField] private GameObject trainingPanel;
+        [Header("数据路径")]
+        [SerializeField] private string colmapDataPath = "./captured_data";
+        [SerializeField] private string outputPath = "./trained_models/instant-ngp";
         
-        [Header("训练配置")]
-        [SerializeField] private string defaultColmapDataPath = "captured_data";
-        [SerializeField] private bool autoStartAfterEnvironmentReady = false;
+        [Header("训练参数")]
+        [SerializeField] private int aabbScale = 32; // 场景缩放因子
+        [SerializeField] private bool keepColmapCoords = false; // 保持COLMAP坐标系
         
-        [Header("调试信息")]
-        [SerializeField] private bool enableLogging = true;
+        [Header("UI 引用")]
+        [SerializeField] private UnityEngine.UI.Button startTrainingButton;
+        [SerializeField] private UnityEngine.UI.Text statusText;
+        [SerializeField] private UnityEngine.UI.Slider progressSlider;
         
         // 内部状态
-        private bool isEnvironmentReady = false;
-        private bool isTrainingInProgress = false;
+        private bool isTraining = false;
+        private Process trainingProcess;
+        private string currentStatus = "就绪";
+        private float currentProgress = 0f;
+        
+        // 事件
+        public event System.Action<string> OnStatusChanged;
+        public event System.Action<float> OnProgressChanged;
+        public event System.Action<bool> OnTrainingCompleted;
         
         void Start()
         {
-            InitializeComponents();
-            SetupEventHandlers();
-            CheckEnvironmentOnStart();
+            InitializeTrainer();
+            SetupUI();
         }
         
-        /// <summary>
-        /// 初始化组件
-        /// </summary>
-        private void InitializeComponents()
+        void Update()
         {
-            // 自动查找组件
-            if (trainingManager == null)
-                trainingManager = FindObjectOfType<InstantNGPTrainingManager>();
-            
-            if (environmentSetup == null)
-                environmentSetup = FindObjectOfType<InstantNGPEnvironmentSetup>();
-            
-            if (progressMonitor == null)
-                progressMonitor = FindObjectOfType<TrainingProgressMonitor>();
-            
-            // 设置进度监控器的训练管理器引用
-            if (progressMonitor != null && trainingManager != null)
+            if (isTraining && trainingProcess != null)
             {
-                progressMonitor.SetTrainingManager(trainingManager);
-            }
-            
-            LogInfo("组件初始化完成");
-        }
-        
-        /// <summary>
-        /// 设置事件处理器
-        /// </summary>
-        private void SetupEventHandlers()
-        {
-            // 环境状态变化事件
-            if (environmentSetup != null)
-            {
-                environmentSetup.OnEnvironmentStatusChanged += OnEnvironmentStatusChanged;
-                environmentSetup.OnEnvironmentIssueFound += OnEnvironmentIssueFound;
-            }
-            
-            // 训练完成事件
-            if (trainingManager != null)
-            {
-                trainingManager.OnTrainingCompleted += OnTrainingCompleted;
-                trainingManager.OnStatusChanged += OnTrainingStatusChanged;
-            }
-            
-            // UI按钮事件
-            if (startTrainingButton) startTrainingButton.onClick.AddListener(OnStartTrainingClicked);
-            if (stopTrainingButton) stopTrainingButton.onClick.AddListener(OnStopTrainingClicked);
-            if (checkEnvironmentButton) checkEnvironmentButton.onClick.AddListener(OnCheckEnvironmentClicked);
-            if (installDependenciesButton) installDependenciesButton.onClick.AddListener(OnInstallDependenciesClicked);
-            
-            LogInfo("事件处理器设置完成");
-        }
-        
-        /// <summary>
-        /// 启动时检查环境
-        /// </summary>
-        private void CheckEnvironmentOnStart()
-        {
-            if (environmentSetup != null)
-            {
-                LogInfo("启动时检查环境...");
-                environmentSetup.CheckEnvironment();
+                UpdateTrainingProgress();
             }
         }
         
         /// <summary>
-        /// 环境状态变化事件处理
+        /// 初始化训练器
         /// </summary>
-        private void OnEnvironmentStatusChanged(InstantNGPEnvironmentSetup.EnvironmentStatus status)
+        private void InitializeTrainer()
         {
-            isEnvironmentReady = (status == InstantNGPEnvironmentSetup.EnvironmentStatus.Ready);
-            
-            UpdateEnvironmentUI(status);
-            
-            if (isEnvironmentReady && autoStartAfterEnvironmentReady)
+            // 验证Instant-NGP路径
+            string exePath = Path.Combine(instantNGPPath, instantNGPExe);
+            if (!File.Exists(exePath))
             {
-                LogInfo("环境就绪，自动开始训练...");
-                StartTraining();
-            }
-        }
-        
-        /// <summary>
-        /// 环境问题发现事件处理
-        /// </summary>
-        private void OnEnvironmentIssueFound(string issue)
-        {
-            LogWarning($"环境问题: {issue}");
-            UpdateEnvironmentStatusText($"环境问题: {issue}", Color.red);
-        }
-        
-        /// <summary>
-        /// 训练状态变化事件处理
-        /// </summary>
-        private void OnTrainingStatusChanged(string status)
-        {
-            UpdateTrainingStatusText(status);
-            
-            if (status.Contains("训练"))
-            {
-                isTrainingInProgress = true;
-                UpdateTrainingUI(true);
-            }
-            else if (status.Contains("完成") || status.Contains("失败"))
-            {
-                isTrainingInProgress = false;
-                UpdateTrainingUI(false);
-            }
-        }
-        
-        /// <summary>
-        /// 训练完成事件处理
-        /// </summary>
-        private void OnTrainingCompleted(bool success)
-        {
-            if (success)
-            {
-                LogInfo("训练成功完成！");
-                ShowSuccessMessage("训练成功完成！");
-            }
-            else
-            {
-                LogError("训练失败！");
-                ShowErrorMessage("训练失败！");
-            }
-        }
-        
-        /// <summary>
-        /// 更新环境UI
-        /// </summary>
-        private void UpdateEnvironmentUI(InstantNGPEnvironmentSetup.EnvironmentStatus status)
-        {
-            if (environmentStatusText == null) return;
-            
-            string statusText = "";
-            Color statusColor = Color.white;
-            
-            switch (status)
-            {
-                case InstantNGPEnvironmentSetup.EnvironmentStatus.Ready:
-                    statusText = "环境就绪 ✓";
-                    statusColor = Color.green;
-                    break;
-                case InstantNGPEnvironmentSetup.EnvironmentStatus.Checking:
-                    statusText = "检查中...";
-                    statusColor = Color.yellow;
-                    break;
-                case InstantNGPEnvironmentSetup.EnvironmentStatus.MissingDependencies:
-                    statusText = "缺少依赖";
-                    statusColor = new Color(1.0f, 0.5f, 0.0f); // 橙色
-                    break;
-                case InstantNGPEnvironmentSetup.EnvironmentStatus.ConfigurationError:
-                    statusText = "配置错误";
-                    statusColor = Color.red;
-                    break;
-                case InstantNGPEnvironmentSetup.EnvironmentStatus.Failed:
-                    statusText = "环境失败";
-                    statusColor = Color.red;
-                    break;
-                default:
-                    statusText = "未知状态";
-                    statusColor = Color.gray;
-                    break;
-            }
-            
-            environmentStatusText.text = statusText;
-            environmentStatusText.color = statusColor;
-            
-            // 更新按钮状态
-            if (startTrainingButton) startTrainingButton.interactable = isEnvironmentReady;
-            if (installDependenciesButton) installDependenciesButton.interactable = !isEnvironmentReady;
-        }
-        
-        /// <summary>
-        /// 更新训练UI
-        /// </summary>
-        private void UpdateTrainingUI(bool isTraining)
-        {
-            if (startTrainingButton) startTrainingButton.interactable = !isTraining && isEnvironmentReady;
-            if (stopTrainingButton) stopTrainingButton.interactable = isTraining;
-        }
-        
-        /// <summary>
-        /// 更新环境状态文本
-        /// </summary>
-        private void UpdateEnvironmentStatusText(string text, Color color)
-        {
-            if (environmentStatusText != null)
-            {
-                environmentStatusText.text = text;
-                environmentStatusText.color = color;
-            }
-        }
-        
-        /// <summary>
-        /// 更新训练状态文本
-        /// </summary>
-        private void UpdateTrainingStatusText(string status)
-        {
-            if (trainingStatusText != null)
-            {
-                trainingStatusText.text = status;
-            }
-        }
-        
-        /// <summary>
-        /// 显示成功消息
-        /// </summary>
-        private void ShowSuccessMessage(string message)
-        {
-            LogInfo(message);
-            // 这里可以添加UI提示
-        }
-        
-        /// <summary>
-        /// 显示错误消息
-        /// </summary>
-        private void ShowErrorMessage(string message)
-        {
-            LogError(message);
-            // 这里可以添加UI提示
-        }
-        
-        #region 公共接口
-        
-        /// <summary>
-        /// 开始训练
-        /// </summary>
-        public async void StartTraining()
-        {
-            if (!isEnvironmentReady)
-            {
-                LogWarning("环境未就绪，无法开始训练");
-                ShowErrorMessage("环境未就绪，请先检查环境");
+                LogError($"Instant-NGP可执行文件不存在: {exePath}");
+                UpdateStatus("错误: Instant-NGP未找到");
                 return;
             }
             
-            if (isTrainingInProgress)
+            // 验证COLMAP数据
+            if (!Directory.Exists(colmapDataPath))
             {
-                LogWarning("训练已在进行中");
+                LogError($"COLMAP数据路径不存在: {colmapDataPath}");
+                UpdateStatus("错误: 训练数据未找到");
+                return;
+            }
+            
+            // 创建输出目录
+            if (!Directory.Exists(outputPath))
+            {
+                Directory.CreateDirectory(outputPath);
+            }
+            
+            LogInfo("Instant-NGP快速训练器初始化完成");
+            UpdateStatus("就绪 - 点击开始训练");
+        }
+        
+        /// <summary>
+        /// 设置UI组件
+        /// </summary>
+        private void SetupUI()
+        {
+            if (startTrainingButton != null)
+            {
+                startTrainingButton.onClick.AddListener(StartTraining);
+            }
+        }
+        
+        /// <summary>
+        /// 开始Instant-NGP训练
+        /// </summary>
+        public async void StartTraining()
+        {
+            if (isTraining)
+            {
+                LogWarning("训练已在进行中，请等待完成");
                 return;
             }
             
             try
             {
-                LogInfo("开始Instant-NGP训练...");
+                UpdateStatus("准备训练数据...");
+                isTraining = true;
+                currentProgress = 0f;
                 
-                if (trainingManager != null)
+                // 步骤1: 转换COLMAP数据为Instant-NGP格式
+                bool conversionSuccess = await ConvertColmapToInstantNGP();
+                if (!conversionSuccess)
                 {
-                    bool success = await trainingManager.StartTraining(defaultColmapDataPath);
-                    if (!success)
+                    throw new Exception("COLMAP数据转换失败");
+                }
+                
+                UpdateStatus("启动Instant-NGP训练...");
+                currentProgress = 0.3f;
+                
+                // 步骤2: 启动Instant-NGP训练
+                bool trainingSuccess = await StartInstantNGPTraining();
+                if (!trainingSuccess)
+                {
+                    throw new Exception("Instant-NGP训练启动失败");
+                }
+                
+                UpdateStatus("训练进行中...");
+                currentProgress = 0.6f;
+                
+                // 步骤3: 监控训练进度
+                await MonitorTrainingProgress();
+                
+                UpdateStatus("训练完成！");
+                currentProgress = 1.0f;
+                OnTrainingCompleted?.Invoke(true);
+                
+            }
+            catch (Exception ex)
+            {
+                LogError($"训练失败: {ex.Message}");
+                UpdateStatus($"训练失败: {ex.Message}");
+                OnTrainingCompleted?.Invoke(false);
+            }
+            finally
+            {
+                isTraining = false;
+                if (trainingProcess != null && !trainingProcess.HasExited)
+                {
+                    trainingProcess.Kill();
+                    trainingProcess = null;
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 转换COLMAP数据为Instant-NGP格式
+        /// </summary>
+        private async Task<bool> ConvertColmapToInstantNGP()
+        {
+            try
+            {
+                UpdateStatus("转换COLMAP数据...");
+                
+                // 使用Instant-NGP的colmap2nerf.py脚本
+                string colmap2nerfScript = Path.Combine(instantNGPPath, "scripts", "colmap2nerf.py");
+                string colmapTextPath = Path.Combine(colmapDataPath, "sparse", "0");
+                string imagesPath = Path.Combine(colmapDataPath, "images");
+                string outputJsonPath = Path.Combine(outputPath, "transforms.json");
+                
+                if (!File.Exists(colmap2nerfScript))
+                {
+                    LogError($"colmap2nerf.py脚本不存在: {colmap2nerfScript}");
+                    return false;
+                }
+                
+                // 构建转换命令
+                string arguments = $"{colmap2nerfScript} " +
+                                 $"--text {colmapTextPath} " +
+                                 $"--images {imagesPath} " +
+                                 $"--out {outputJsonPath} " +
+                                 $"--aabb_scale {aabbScale}";
+                
+                if (keepColmapCoords)
+                {
+                    arguments += " --keep_colmap_coords";
+                }
+                
+                LogInfo($"执行转换命令: python {arguments}");
+                
+                // 执行Python脚本
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = arguments,
+                    WorkingDirectory = instantNGPPath,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                
+                using (var process = Process.Start(startInfo))
+                {
+                    if (process == null)
                     {
-                        LogError("训练启动失败");
-                        ShowErrorMessage("训练启动失败");
+                        LogError("无法启动Python转换进程");
+                        return false;
                     }
+                    
+                    // 异步等待完成
+                    await Task.Run(() => process.WaitForExit());
+                    
+                    if (process.ExitCode != 0)
+                    {
+                        string error = await process.StandardError.ReadToEndAsync();
+                        LogError($"转换失败，退出码: {process.ExitCode}, 错误: {error}");
+                        return false;
+                    }
+                    
+                    string output = await process.StandardOutput.ReadToEndAsync();
+                    LogInfo($"转换成功: {output}");
                 }
-                else
+                
+                // 验证输出文件
+                if (!File.Exists(outputJsonPath))
                 {
-                    LogError("训练管理器未找到");
-                    ShowErrorMessage("训练管理器未找到");
+                    LogError("转换后的transforms.json文件不存在");
+                    return false;
                 }
+                
+                LogInfo("COLMAP数据转换完成");
+                return true;
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                LogError($"启动训练时发生错误: {e.Message}");
-                ShowErrorMessage($"启动训练时发生错误: {e.Message}");
+                LogError($"转换过程异常: {ex.Message}");
+                return false;
             }
         }
         
         /// <summary>
-        /// 停止训练
+        /// 启动Instant-NGP训练
         /// </summary>
-        public void StopTraining()
+        private async Task<bool> StartInstantNGPTraining()
         {
-            if (trainingManager != null)
+            try
             {
-                LogInfo("停止训练...");
-                trainingManager.StopTraining();
+                UpdateStatus("启动Instant-NGP...");
+                
+                string exePath = Path.Combine(instantNGPPath, instantNGPExe);
+                string transformsJsonPath = Path.Combine(outputPath, "transforms.json");
+                
+                if (!File.Exists(transformsJsonPath))
+                {
+                    LogError("transforms.json文件不存在，无法启动训练");
+                    return false;
+                }
+                
+                // 启动Instant-NGP进程
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = transformsJsonPath,
+                    WorkingDirectory = instantNGPPath,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = false // 显示GUI窗口
+                };
+                
+                trainingProcess = Process.Start(startInfo);
+                if (trainingProcess == null)
+                {
+                    LogError("无法启动Instant-NGP进程");
+                    return false;
+                }
+                
+                LogInfo("Instant-NGP进程启动成功");
+                return true;
             }
-        }
-        
-        /// <summary>
-        /// 检查环境
-        /// </summary>
-        public void CheckEnvironment()
-        {
-            if (environmentSetup != null)
+            catch (Exception ex)
             {
-                LogInfo("手动检查环境...");
-                environmentSetup.CheckEnvironment();
+                LogError($"启动Instant-NGP失败: {ex.Message}");
+                return false;
             }
         }
         
         /// <summary>
-        /// 安装依赖
+        /// 监控训练进度
         /// </summary>
-        public void InstallDependencies()
+        private async Task MonitorTrainingProgress()
         {
-            if (environmentSetup != null)
+            try
             {
-                LogInfo("安装缺失的依赖...");
-                environmentSetup.InstallMissingDependencies();
+                UpdateStatus("监控训练进度...");
+                
+                // 等待训练进程完成或超时
+                int timeoutSeconds = 30; // 30秒超时
+                int elapsedSeconds = 0;
+                
+                while (trainingProcess != null && !trainingProcess.HasExited && elapsedSeconds < timeoutSeconds)
+                {
+                    await Task.Delay(1000); // 等待1秒
+                    elapsedSeconds++;
+                    
+                    // 更新进度（模拟）
+                    float progress = 0.6f + (elapsedSeconds / (float)timeoutSeconds) * 0.4f;
+                    currentProgress = Mathf.Clamp01(progress);
+                    OnProgressChanged?.Invoke(currentProgress);
+                    
+                    UpdateStatus($"训练中... ({elapsedSeconds}s)");
+                }
+                
+                if (trainingProcess != null && !trainingProcess.HasExited)
+                {
+                    LogWarning("训练超时，强制结束进程");
+                    trainingProcess.Kill();
+                }
+                
+                LogInfo("训练监控完成");
             }
-        }
-        
-        /// <summary>
-        /// 设置训练数据路径
-        /// </summary>
-        public void SetTrainingDataPath(string path)
-        {
-            defaultColmapDataPath = path;
-            LogInfo($"训练数据路径设置为: {path}");
-        }
-        
-        /// <summary>
-        /// 获取环境状态
-        /// </summary>
-        public bool IsEnvironmentReady() => isEnvironmentReady;
-        
-        /// <summary>
-        /// 获取训练状态
-        /// </summary>
-        public bool IsTrainingInProgress() => isTrainingInProgress;
-        
-        #endregion
-        
-        #region 按钮事件处理
-        
-        /// <summary>
-        /// 开始训练按钮点击事件
-        /// </summary>
-        private void OnStartTrainingClicked()
-        {
-            StartTraining();
-        }
-        
-        /// <summary>
-        /// 停止训练按钮点击事件
-        /// </summary>
-        private void OnStopTrainingClicked()
-        {
-            StopTraining();
-        }
-        
-        /// <summary>
-        /// 检查环境按钮点击事件
-        /// </summary>
-        private void OnCheckEnvironmentClicked()
-        {
-            CheckEnvironment();
-        }
-        
-        /// <summary>
-        /// 安装依赖按钮点击事件
-        /// </summary>
-        private void OnInstallDependenciesClicked()
-        {
-            InstallDependencies();
-        }
-        
-        #endregion
-        
-        #region 配置面板
-        
-        /// <summary>
-        /// 显示训练配置面板
-        /// </summary>
-        public void ShowTrainingConfig()
-        {
-            if (trainingPanel != null)
+            catch (Exception ex)
             {
-                trainingPanel.SetActive(true);
+                LogError($"监控训练进度失败: {ex.Message}");
             }
         }
         
         /// <summary>
-        /// 隐藏训练配置面板
+        /// 更新训练进度
         /// </summary>
-        public void HideTrainingConfig()
+        private void UpdateTrainingProgress()
         {
-            if (trainingPanel != null)
+            if (trainingProcess != null && !trainingProcess.HasExited)
             {
-                trainingPanel.SetActive(false);
+                // 这里可以添加更详细的进度监控逻辑
+                // 比如解析Instant-NGP的输出日志
             }
         }
         
         /// <summary>
-        /// 显示环境配置面板
+        /// 更新状态显示
         /// </summary>
-        public void ShowEnvironmentConfig()
+        private void UpdateStatus(string status)
         {
-            if (environmentPanel != null)
+            currentStatus = status;
+            LogInfo($"状态更新: {status}");
+            
+            if (statusText != null)
             {
-                environmentPanel.SetActive(true);
+                statusText.text = status;
             }
+            
+            OnStatusChanged?.Invoke(status);
         }
         
         /// <summary>
-        /// 隐藏环境配置面板
+        /// 日志记录
         /// </summary>
-        public void HideEnvironmentConfig()
-        {
-            if (environmentPanel != null)
-            {
-                environmentPanel.SetActive(false);
-            }
-        }
-        
-        #endregion
-        
-        #region 日志系统
-        
         private void LogInfo(string message)
         {
-            if (enableLogging)
-            {
-                UnityEngine.Debug.Log($"[QuickTrainer] {message}");
-            }
+            UnityEngine.Debug.Log($"[InstantNGPQuickTrainer] {message}");
         }
         
         private void LogWarning(string message)
         {
-            if (enableLogging)
-            {
-                UnityEngine.Debug.LogWarning($"[QuickTrainer] {message}");
-            }
+            UnityEngine.Debug.LogWarning($"[InstantNGPQuickTrainer] {message}");
         }
         
         private void LogError(string message)
         {
-            if (enableLogging)
-            {
-                UnityEngine.Debug.LogError($"[QuickTrainer] {message}");
-            }
+            UnityEngine.Debug.LogError($"[InstantNGPQuickTrainer] {message}");
         }
         
-        #endregion
+        /// <summary>
+        /// 获取当前状态
+        /// </summary>
+        public string GetCurrentStatus() => currentStatus;
+        
+        /// <summary>
+        /// 获取当前进度
+        /// </summary>
+        public float GetCurrentProgress() => currentProgress;
+        
+        /// <summary>
+        /// 检查是否正在训练
+        /// </summary>
+        public bool IsTraining() => isTraining;
         
         void OnDestroy()
         {
-            // 清理事件处理器
-            if (environmentSetup != null)
+            if (trainingProcess != null && !trainingProcess.HasExited)
             {
-                environmentSetup.OnEnvironmentStatusChanged -= OnEnvironmentStatusChanged;
-                environmentSetup.OnEnvironmentIssueFound -= OnEnvironmentIssueFound;
-            }
-            
-            if (trainingManager != null)
-            {
-                trainingManager.OnTrainingCompleted -= OnTrainingCompleted;
-                trainingManager.OnStatusChanged -= OnTrainingStatusChanged;
+                trainingProcess.Kill();
             }
         }
     }

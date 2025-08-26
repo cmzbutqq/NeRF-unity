@@ -191,6 +191,32 @@ def generate_transforms_json_final(colmap_data_path, output_path, aabb_scale=32)
         # 创建输出目录
         os.makedirs(output_path, exist_ok=True)
 
+        # 创建images子目录
+        images_output_path = os.path.join(output_path, "images")
+        os.makedirs(images_output_path, exist_ok=True)
+
+        # 复制图像文件
+        source_images_path = os.path.join(colmap_data_path, "images")
+        if not os.path.exists(source_images_path):
+            raise FileNotFoundError(f"源图像目录不存在: {source_images_path}")
+
+        print(f"开始复制图像文件...")
+        copied_count = 0
+
+        for image in images:
+            source_image = os.path.join(source_images_path, image["name"])
+            target_image = os.path.join(images_output_path, image["name"])
+
+            if os.path.exists(source_image):
+                import shutil
+
+                shutil.copy2(source_image, target_image)
+                copied_count += 1
+            else:
+                print(f"警告: 源图像文件不存在: {source_image}")
+
+        print(f"图像文件复制完成: {copied_count}/{len(images)} 个文件")
+
         # 生成transforms.json - 使用正确的相机参数
         transforms_data = {
             "camera_angle_x": camera_angle_x,

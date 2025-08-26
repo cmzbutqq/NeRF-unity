@@ -83,6 +83,11 @@
 
 - **Dataset Path**: `./Instant-NGP-for-RTX-3000-and-4000/data/nerf/unity_scene`
 
+#### 训练参数
+
+- 已简化，只保留核心功能
+- 启动 Instant-NGP GUI 进行训练
+
 #### UI 组件引用
 
 - **Start Training Button**: 拖拽 Start Training Button
@@ -143,6 +148,8 @@ TrainingCanvas
 - 点击"转换数据"按钮
 - 自动运行 Python 转换器
 - 生成 transforms.json 文件
+- **自动复制图像文件**到 Instant-NGP 数据集目录
+- 创建完整的训练数据集结构
 
 ### 2. 训练启动
 

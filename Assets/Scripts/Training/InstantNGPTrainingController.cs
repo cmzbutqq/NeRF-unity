@@ -16,11 +16,14 @@ namespace Training
     public class InstantNGPTrainingController : MonoBehaviour
     {
         [Header("Instant-NGP 配置")]
-        [SerializeField] private string instantNGPPath = "./Instant-NGP-for-RTX-3000-and-4000";
-        [SerializeField] private string instantNGPExe = "instant-ngp.exe";
+        [SerializeField] private string ngpPath = "Instant-NGP-for-RTX-3000-and-4000";
+        [SerializeField] private string exeName = "instant-ngp.exe";
         
         [Header("数据路径")]
-        [SerializeField] private string datasetPath = "./Instant-NGP-for-RTX-3000-and-4000/data/nerf/unity_scene";
+        [SerializeField] private string datasetPath = "Instant-NGP-for-RTX-3000-and-4000/data/nerf/unity_scene";
+        
+        [Header("训练参数")]
+
         
         [Header("UI 组件")]
         [SerializeField] private Button startTrainingButton;
@@ -68,15 +71,15 @@ namespace Training
             LogInfo("Instant-NGP 训练控制器初始化...");
             
             // 验证路径
-            if (!Directory.Exists(instantNGPPath))
+            if (!Directory.Exists(ngpPath))
             {
-                LogError($"Instant-NGP 路径不存在: {instantNGPPath}");
+                LogError($"Instant-NGP 路径不存在: {ngpPath}");
                 UpdateStatus("错误: Instant-NGP 路径无效");
                 return;
             }
             
             // 验证可执行文件
-            string exePath = Path.Combine(instantNGPPath, instantNGPExe);
+            string exePath = Path.Combine(ngpPath, exeName);
             if (!File.Exists(exePath))
             {
                 LogError($"Instant-NGP 可执行文件不存在: {exePath}");
@@ -136,9 +139,22 @@ namespace Training
             if (!Directory.Exists(imagesPath))
             {
                 LogWarning("图像目录不存在");
-                UpdateStatus("警告: 图像目录不存在");
+                UpdateStatus("警告: 图像目录不存在，请先运行数据转换");
                 return;
             }
+            
+            // 检查图像文件数量
+            string[] imageFiles = Directory.GetFiles(imagesPath, "*.jpg");
+            if (imageFiles.Length == 0)
+            {
+                LogWarning("图像目录中没有找到.jpg文件");
+                UpdateStatus("警告: 图像目录为空，请先运行数据转换");
+                return;
+            }
+            
+            LogInfo($"找到 {imageFiles.Length} 个图像文件");
+            
+
             
             LogInfo("环境验证通过");
             UpdateStatus("环境就绪");
@@ -261,24 +277,23 @@ namespace Training
         {
             try
             {
-                string exePath = Path.Combine(instantNGPPath, instantNGPExe);
-                string workingDir = Path.GetFullPath(instantNGPPath);
-                string datasetName = Path.GetFileName(datasetPath);
+                string workingDir = Path.GetFullPath(ngpPath);
+                string trainingArgs = Path.GetFullPath(datasetPath);
+
+                LogInfo($"启动Instant-NGP训练:");
+
+                // 在debugText中输出完整的训练指令
+                string fullCommand = $"完整训练指令:\n{workingDir} > {exeName} {trainingArgs}";
+                UpdateStatus(fullCommand);
                 
-                LogInfo($"启动Instant-NGP训练: {exePath}");
-                LogInfo($"工作目录: {workingDir}");
-                LogInfo($"数据集: {datasetName}");
-                
-                // 创建进程启动信息
+                // 创建进程启动信息 - 显示GUI窗口，不重定向输出
                 var startInfo = new ProcessStartInfo
                 {
-                    FileName = exePath,
-                    Arguments = $"data/nerf/{datasetName}",
+                    FileName = exeName,
+                    Arguments = trainingArgs,
                     WorkingDirectory = workingDir,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = false
+                    UseShellExecute = true,  // 使用Shell执行，显示GUI
+                    CreateNoWindow = false   // 显示窗口
                 };
                 
                 // 启动进程
@@ -305,13 +320,18 @@ namespace Training
             if (trainingProcess == null || trainingProcess.HasExited)
             {
                 isTraining = false;
-                UpdateStatus("训练进程已结束");
+                
+                        // 训练进程已结束
+                UpdateStatus("Instant-NGP训练进程已结束");
+                LogInfo("Instant-NGP训练进程已结束");
+                OnTrainingCompleted?.Invoke(true);
+                
                 UpdateUIState();
                 return;
             }
             
-            // 这里可以添加进度监控逻辑
-            // 由于Instant-NGP是独立进程，进度监控比较复杂
+            // 训练进行中
+            UpdateStatus("Instant-NGP训练进行中...");
         }
         
         /// <summary>

@@ -84,7 +84,6 @@ Assets/Scripts/
 
 1. **固定位置采集** (`captured_data/`)
 
-   - 84 张图像，1920x1080 分辨率
    - 完整的 COLMAP 格式支持
    - 适合静态场景重建
 

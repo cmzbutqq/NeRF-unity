@@ -117,12 +117,13 @@ namespace DataCapture
         
         /// <summary>
         /// 转换Unity位置到COLMAP坐标系
-        /// Unity: Y向上，Z向前，右手坐标系
-        /// COLMAP: Y向下，Z向后，右手坐标系
+        /// Unity: 左手坐标系，Y向上，Z向前
+        /// COLMAP: 右手坐标系，Y向下，Z向后
         /// </summary>
         static Vector3 ConvertUnityToCOLMAPPosition(Vector3 unityPos)
         {
             // 转换坐标系：Unity (x, y, z) -> COLMAP (x, -y, -z)
+            // 注意：Unity是左手坐标系，COLMAP是右手坐标系
             return new Vector3(unityPos.x, -unityPos.y, -unityPos.z);
         }
         
@@ -132,18 +133,14 @@ namespace DataCapture
         static Quaternion ConvertUnityToCOLMAPRotation(Quaternion unityRot)
         {
             // Unity到COLMAP的旋转转换
-            // 需要考虑坐标系差异
+            // Unity: 左手坐标系，Y向上，Z向前
+            // COLMAP: 右手坐标系，Y向下，Z向后
             
-            // 创建坐标系转换矩阵
-            Matrix4x4 unityToCOLMAP = Matrix4x4.identity;
-            unityToCOLMAP.m11 = -1; // Y轴翻转
-            unityToCOLMAP.m22 = -1; // Z轴翻转
+            // 直接转换四元数，避免矩阵运算引入的缩放问题
+            // 对于坐标系转换：(x, y, z) -> (x, -y, -z)
+            // 对应的四元数转换：(w, x, y, z) -> (w, x, -y, -z)
             
-            // 转换旋转
-            Matrix4x4 rotMatrix = Matrix4x4.Rotate(unityRot);
-            Matrix4x4 convertedMatrix = unityToCOLMAP * rotMatrix * unityToCOLMAP.inverse;
-            
-            return convertedMatrix.rotation;
+            return new Quaternion(unityRot.x, unityRot.y, -unityRot.z, unityRot.w);
         }
         
         /// <summary>

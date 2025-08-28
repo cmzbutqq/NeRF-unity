@@ -1,4 +1,6 @@
-# 基于 Unity 的 Instant-NGP 快速训练系统设计与实现
+# 基于 Unity 的 Instant-NGP 快速训练系统
+
+陈梦泽
 
 ## 摘要
 
